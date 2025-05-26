@@ -1,0 +1,13 @@
+{
+  "name": "f1-race-bot",
+  "version": "1.0.0",
+  "description": "Posts F1, F2, F3 race reminders to X.com",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "serverless-python-requirements": "^6.1.2"
+  }
+}

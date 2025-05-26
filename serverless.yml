@@ -1,0 +1,41 @@
+service: f1-race-bot
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: python3.10
+  stage: dev
+  region: sa-east-1
+  timeout: 30
+  memorySize: 128
+  environment:
+    CONSUMER_KEY: ${env:CONSUMER_KEY}
+    CONSUMER_SECRET: ${env:CONSUMER_SECRET}
+    ACCESS_TOKEN: ${env:ACCESS_TOKEN}
+    ACCESS_TOKEN_SECRET: ${env:ACCESS_TOKEN_SECRET}
+  iam:
+    role:
+      statements:
+        - Effect: "Allow"
+          Action:
+            - "logs:CreateLogGroup"
+            - "logs:CreateLogStream"
+            - "logs:PutLogEvents"
+          Resource: "arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/${self:service}-${sls:stage}-*:*"
+
+functions:
+  raceReminderBot:
+    handler: lambda_function.lambda_handler
+    description: Posts F1, F2, F3 race reminders to X.com
+    events:
+      - schedule:
+          rate: cron(0 10 * * ? *)
+          enabled: true
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: true
