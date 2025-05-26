@@ -14,6 +14,7 @@ provider:
     CONSUMER_SECRET: ${env:CONSUMER_SECRET}
     ACCESS_TOKEN: ${env:ACCESS_TOKEN}
     ACCESS_TOKEN_SECRET: ${env:ACCESS_TOKEN_SECRET}
+    GEMINI_API_KEY: ${env:GEMINI_API_KEY}
   iam:
     role:
       statements:

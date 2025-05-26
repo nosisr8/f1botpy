@@ -4,6 +4,8 @@ import json
 import logging
 import tweepy
 import pytz
+import google.generativeai as genai
+import random
 
 # Configure logging
 logger = logging.getLogger()
@@ -21,6 +23,8 @@ CONSUMER_KEY = os.environ.get("CONSUMER_KEY")
 CONSUMER_SECRET = os.environ.get("CONSUMER_SECRET")
 ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
 ACCESS_TOKEN_SECRET = os.environ.get("ACCESS_TOKEN_SECRET")
+# --- Google Gemini API Key from Environment Variables ---
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # --- Timezone for Paraguay ---
 # Using pytz for robust timezone handling, as datetime.timezone can be limited
@@ -81,11 +85,122 @@ def get_next_race_info(series="F1"):
         logger.info(f"No upcoming {series} event found in the schedule data.")
         return None
 
+def generar_tweet_f1(tipo_tweet, piloto="", equipo="", carrera="", evento_especifico="", estilo="emocionante", longitud="corta", series="F1"):
+    """
+    Genera un tweet de Fórmula 1 utilizando el modelo Gemini.
+
+    Args:
+        tipo_tweet (str): Define el tipo de tweet a generar (ej. "previo_carrera", "resultado_carrera", etc.).
+        piloto (str): Nombre del piloto involucrado (opcional).
+        equipo (str): Nombre del equipo involucrado (opcional).
+        carrera (str): Nombre de la carrera o Gran Premio (opcional).
+        evento_especifico (str): Detalles adicionales del evento (ej. "pit stop", "adelantamiento", "accidente").
+        estilo (str): El estilo del tweet (ej. "emocionante", "analítico", "humorístico", "inspirador", "fanático").
+        longitud (str): La longitud deseada del tweet ("corta", "media", "larga").
+
+    Returns:
+        str: El tweet de F1 generado.
+    """
+    # Asegúrate de que la clave API esté configurada antes de usar el modelo
+    if not GEMINI_API_KEY:
+        logger.error("GEMINI_API_KEY no está configurada. No se puede generar tweet con Gemini.")
+        return "¡La F1 está en marcha! Próximamente más detalles."
+
+    genai.configure(api_key=GEMINI_API_KEY)
+
+    model = genai.GenerativeModel('gemini-1.5-flash') # O 'gemini-1.5-flash' para un modelo más rápido y rentable
+
+    prompt = f"Genera un tweet sobre {series}. "
+    prompt += f"El estilo debe ser {estilo}. "
+    prompt += f"La longitud debe ser {longitud} y no debe exceder los 240 caracteres. "
+    prompt += "Incluye emojis y hashtags relevantes para F1, el piloto, el equipo y la carrera. "
+    prompt += "Escribe en español de Paraguay si es posible, o español latino."
+
+    hashtags_base = ["#" + series]
+    if piloto:
+        hashtags_base.append(f"#{piloto.replace(' ', '')}")
+    if equipo:
+        hashtags_base.append(f"#{equipo.replace(' ', '')}")
+    if carrera:
+        # Intenta extraer un hashtag más limpio del nombre de la carrera
+        short_carrera_tag = carrera.replace("Gran Premio de ", "").replace("GP", "").replace(" de ", "").replace(" ", "")
+        if short_carrera_tag:
+            hashtags_base.append(f"#{short_carrera_tag}")
+        else:
+            hashtags_base.append(f"#{carrera.replace(' ', '')}")
+
+    # Lógica para construir el prompt basado en el tipo de tweet
+    if tipo_tweet == "previo_carrera":
+        prompt += f"Tema: La expectativa y emoción antes del {carrera} en el ."
+        if piloto:
+            prompt += f" Enfocado en la actuación de {piloto}."
+        if equipo:
+            prompt += f" Con un énfasis en el rendimiento de {equipo}."
+        if evento_especifico:
+            prompt += f" Específicamente sobre {evento_especifico}."
+        hashtags_base.extend(["#F1esta", "#RaceWeekend", "#CuentaAtrás"])
+
+    elif tipo_tweet == "resultado_carrera":
+        prompt += f"Tema: El resultado y los momentos clave del {carrera}."
+        if piloto:
+            prompt += f" Destacando la victoria o el podio de {piloto}."
+        if equipo:
+            prompt += f" Celebrando el éxito de {equipo}."
+        hashtags_base.extend(["#Winner", "#Podium", "#RaceResults", "#F1resultados"])
+
+    elif tipo_tweet == "noticia_piloto":
+        prompt += f"Tema: Noticias o rumores sobre el piloto {piloto}."
+        if evento_especifico:
+            prompt += f" Específicamente sobre {evento_especifico}."
+        hashtags_base.extend(["#F1News", "#DriverUpdate", "#ÚltimaHoraF1"])
+
+    elif tipo_tweet == "noticia_equipo":
+        prompt += f"Tema: Noticias o desarrollos sobre el equipo {equipo}."
+        if evento_especifico:
+            prompt += f" Específicamente sobre {evento_especifico}."
+        hashtags_base.extend(["#F1Team", "#TeamNews", "#DesarrolloF1"])
+
+    elif tipo_tweet == "momento_clasificacion":
+        prompt += f"Tema: Un momento emocionante de la clasificación del {carrera}."
+        if piloto:
+            prompt += f" Con {piloto} siendo el protagonista."
+        if evento_especifico:
+            prompt += f" Específicamente sobre {evento_especifico}."
+        hashtags_base.extend(["#Qualifying", "#PolePosition", "#Q3", "#F1Clasificación"])
+
+    elif tipo_tweet == "analisis_general":
+        prompt += f"Tema: Análisis general o comentario sobre un aspecto de la F1."
+        if evento_especifico:
+            prompt += f" Enfocado en {evento_especifico}."
+        hashtags_base.extend(["#F1Insights", "#AnálisisF1", "#EstrategiaF1"])
+
+    elif tipo_tweet == "humor_f1":
+        prompt += f"Tema: Un tweet humorístico sobre un cliché o situación común en la F1. "
+        if evento_especifico:
+            prompt += f" Relacionado con: {evento_especifico}."
+        hashtags_base.extend(["#F1Humor", "#F1Memes", "#F1Risas"])
+        prompt += " Usa un tono ligero y divertido."
+
+    # Añadir hashtags aleatorios para mayor variedad, limitando a 5-7 para no saturar
+    random.shuffle(hashtags_base)
+    # Seleccionamos un número de hashtags entre 3 y 7, o el total si es menor
+    num_hashtags = random.randint(3, min(5, len(hashtags_base)))
+    prompt += " " + " ".join(random.sample(hashtags_base, num_hashtags))
+
+    try:
+        response = model.generate_content(prompt)
+        tweet_generado = response.text
+        return tweet_generado[:240] # Asegurarse de no exceder los 280 caracteres
+    except Exception as e:
+        logger.error(f"Error al generar el tweet de F1 con Gemini: {e}")
+        return f"¡Error en la IA! Pero la F1 sigue siendo increíble. #F1"
+
 def compose_tweet_message(race_info):
     """
-    Composes the tweet message based on race information.
+    Composes the tweet message using Gemini based on race information.
     """
     if not race_info:
+        logger.warning("No race info provided to compose tweet.")
         return None
 
     event_name = race_info["name"]
@@ -97,37 +212,53 @@ def compose_tweet_message(race_info):
     time_until_race = race_date - now_paraguay
     days_remaining = time_until_race.days
 
-    # Only compose message if the race is in the future or today
-    if days_remaining >= 0:
-        # Format the date and day name in Spanish
-        day_names_map = {
-            'Monday': 'lunes', 'Tuesday': 'martes', 'Wednesday': 'miércoles',
-            'Thursday': 'jueves', 'Friday': 'viernes', 'Saturday': 'sábado', 'Sunday': 'domingo'
-        }
-        month_names_map = {
-            'January': 'enero', 'February': 'febrero', 'March': 'marzo',
-            'April': 'abril', 'May': 'mayo', 'June': 'junio',
-            'July': 'julio', 'August': 'agosto', 'September': 'septiembre',
-            'October': 'octubre', 'November': 'noviembre', 'December': 'diciembre'
-        }
-
-        formatted_day_name = day_names_map.get(race_date.strftime('%A'), race_date.strftime('%A'))
-        formatted_month_name = month_names_map.get(race_date.strftime('%B'), race_date.strftime('%B'))
-
-        # Extract a short event name (e.g., "Monaco") from the full name
-        short_event_name = event_name.replace("Gran Premio de ", "").replace("F2 ", "").replace("F3 ", "").strip()
-        short_event_name = short_event_name.split(' ')[0].capitalize() if short_event_name else "Evento"
-        if days_remaining == 0:
-            message = f"🚨 ¡Hoy es la carrera de {series} en {short_event_name}!\n"
-        else:
-            message = (
-                f"🏁 Faltan {days_remaining} días para la siguiente carrera de {series} en {short_event_name}\n"
-                f"Evento: {event_name}\n" # Use raw event_name as per example
-                f"📅 Fecha: {formatted_day_name} {race_date.day} de {formatted_month_name}"
+    # Define the core logic for when to tweet
+    if days_remaining == 0:
+        # Hoy es la carrera
+        logger.info(f"Generating 'today is race' tweet for {event_name}...")
+        message = generar_tweet_f1(
+            tipo_tweet="previo_carrera",
+            carrera=event_name,
+            estilo="emocionante",
+            longitud="corta",
+            evento_especifico="¡hoy es el día de la carrera!",
+            series=series
         )
+        # Asegurarse de que el tweet generado por Gemini empiece con "🚨 ¡Hoy es la carrera..."
+        if not message.lower().startswith("🚨 ¡hoy es la carrera"):
+            message = "🚨 ¡Hoy es la carrera! " + message # Forzamos el inicio si Gemini no lo hace
+        return message
+
+    elif 0 < days_remaining <= 7:
+        # La carrera es en menos de una semana
+        logger.info(f"Generating 'countdown' tweet for {event_name} (days remaining: {days_remaining})...")
+        message = generar_tweet_f1(
+            tipo_tweet="previo_carrera",
+            carrera=event_name,
+            estilo="emocionante",
+            longitud="corta",
+            evento_especifico=f"faltan {days_remaining} días",
+            series=series
+        )
+        # Añade la fecha y el día si Gemini no lo incluyó explícitamente y si es relevante
+        if f"faltan {days_remaining} días" not in message and "día de la carrera" not in message:
+            # Formatear la fecha y el día de la semana en español
+            day_names_map = {
+                'Monday': 'lunes', 'Tuesday': 'martes', 'Wednesday': 'miércoles',
+                'Thursday': 'jueves', 'Friday': 'viernes', 'Saturday': 'sábado', 'Sunday': 'domingo'
+            }
+            month_names_map = {
+                'January': 'enero', 'February': 'febrero', 'March': 'marzo',
+                'April': 'abril', 'May': 'mayo', 'June': 'junio',
+                'July': 'julio', 'August': 'agosto', 'September': 'septiembre',
+                'October': 'octubre', 'November': 'noviembre', 'December': 'diciembre'
+            }
+            formatted_day_name = day_names_map.get(race_date.strftime('%A'), race_date.strftime('%A'))
+            formatted_month_name = month_names_map.get(race_date.strftime('%B'), race_date.strftime('%B'))
+            message += f"\n📅 Fecha: {formatted_day_name} {race_date.day} de {formatted_month_name}."
         return message
     else:
-        logger.info(f"Race {event_name} has already passed or is too close to compose 'days remaining' message.")
+        logger.info(f"Race {event_name} is too far (days remaining: {days_remaining}) or has passed. No tweet will be composed.")
         return None
 
 def post_tweet(message):
