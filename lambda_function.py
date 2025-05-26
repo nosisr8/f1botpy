@@ -108,13 +108,16 @@ def generar_tweet_f1(tipo_tweet, piloto="", equipo="", carrera="", evento_especi
 
     genai.configure(api_key=GEMINI_API_KEY)
 
-    model = genai.GenerativeModel('gemini-1.5-flash') # O 'gemini-1.5-flash' para un modelo más rápido y rentable
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
     prompt = f"Genera un tweet sobre {series}. "
     prompt += f"El estilo debe ser {estilo}. "
     prompt += f"La longitud debe ser {longitud} y no debe exceder los 240 caracteres. "
-    prompt += "Incluye emojis y hashtags relevantes para F1, el piloto, el equipo y la carrera. "
+    prompt += f"Incluye emojis y hashtags relevantes para {series}, y la carrera. "
     prompt += "Escribe en español de Paraguay si es posible, o español latino."
+
+    if series == "F2":
+        piloto = piloto if piloto else "@JoshuaDuerksen1"
 
     hashtags_base = ["#" + series]
     if piloto:
