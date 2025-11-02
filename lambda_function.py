@@ -7,6 +7,16 @@ import pytz
 import google.generativeai as genai
 import random
 
+# Load environment variables from .env file when running locally
+# This is only needed for local execution; Lambda will have env vars already set
+if __name__ == "__main__" or not os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        # python-dotenv not installed, skip loading .env
+        pass
+
 # Configure logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -85,6 +95,54 @@ def get_next_race_info(series="F1"):
         logger.info(f"No upcoming {series} event found in the schedule data.")
         return None
 
+def get_available_gemini_model():
+    """
+    Obtiene un modelo Gemini disponible que soporte generateContent.
+    
+    Returns:
+        GenerativeModel: Un modelo configurado y disponible, o None si no hay modelos disponibles.
+    """
+    try:
+        # List available models
+        models = genai.list_models()
+        
+        # Filter models that support generateContent
+        available_models = []
+        for model_info in models:
+            if 'generateContent' in model_info.supported_generation_methods:
+                # Extract just the model name (remove 'models/' prefix if present)
+                model_name = model_info.name.replace('models/', '')
+                available_models.append(model_name)
+                logger.info(f"Found available model: {model_name}")
+        
+        if not available_models:
+            logger.error("No models with generateContent support found.")
+            return None
+        
+        # Prefer flash models for speed, then pro models
+        preferred_models = [m for m in available_models if 'flash' in m.lower()]
+        if preferred_models:
+            model_name = preferred_models[0]
+        else:
+            # Use first available model
+            model_name = available_models[0]
+        
+        logger.info(f"Using model: {model_name}")
+        return genai.GenerativeModel(model_name)
+        
+    except Exception as e:
+        logger.error(f"Error listing models: {e}")
+        # Fallback: try common model names
+        fallback_models = ['models/gemini-1.5-flash', 'models/gemini-pro', 'models/gemini-1.5-pro']
+        for model_name in fallback_models:
+            try:
+                model = genai.GenerativeModel(model_name)
+                logger.info(f"Using fallback model: {model_name}")
+                return model
+            except Exception:
+                continue
+        return None
+
 def generar_tweet_f1(tipo_tweet, piloto="", equipo="", carrera="", evento_especifico="", estilo="emocionante", longitud="corta", series="F1"):
     """
     Genera un tweet de Fórmula 1 utilizando el modelo Gemini.
@@ -108,7 +166,12 @@ def generar_tweet_f1(tipo_tweet, piloto="", equipo="", carrera="", evento_especi
 
     genai.configure(api_key=GEMINI_API_KEY)
 
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Get an available model
+    model = get_available_gemini_model()
+    
+    if model is None:
+        logger.error("No compatible Gemini model found. Please check your API configuration.")
+        return "¡La F1 está en marcha! Próximamente más detalles."
 
     prompt = f"Genera un tweet sobre {series}. "
     prompt += f"El estilo debe ser {estilo}. "
